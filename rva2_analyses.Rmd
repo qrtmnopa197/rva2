@@ -1,0 +1,164 @@
+---
+title: "Analysis for RVA 2"
+author: "Daniel P"
+output: html_document
+---
+
+Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(mc.cores=12)
+
+path_to_project_directory <- "~/projects/RVA_2/"
+path_to_s22 <- "~/projects/spring_2022_study/"
+path_to_rva <- "~/projects/RVA/"
+
+stan_model_dir<- paste0(path_to_project_directory,"code/stan_models/")
+model_out_dir <- paste0(path_to_project_directory,"output/results/stan_model_fits/")
+
+#load custom functions
+source(paste0(path_to_s22,"code/functions/fit_stan_model.R")) 
+source(paste0(path_to_s22,"code/functions/s22_utilities.R")) 
+source(paste0(path_to_s22,"code/functions/stan_utilities.R"))
+source(paste0(path_to_rva,"code/functions/rva_utilities.R"))
+source(paste0(path_to_project_directory,"code/functions/rva2_utilities.R")) 
+
+library(tidyverse)
+library(cmdstanr)
+library(bayesplot)
+library(abind)
+library(sigmoid)
+```
+
+Read in data, run through QC
+```{r}
+trials <- read.csv(paste0(path_to_project_directory,"analysis_data/trial_level_data_all_subs_2024-08-27_18_23_19.092039.csv"))
+subs <- read.csv(paste0(path_to_project_directory,"analysis_data/sub_level_data_all_subs_2024-08-27_18_23_19.092039.csv"))
+
+sub_hard_fail <- subs %>% filter(att_checks_passed < 3 |
+                                 answers_incorrect > 2 |
+                                 sd_valrat < .05 |
+                                 sd_probrat < .05 |
+                                 valrat_skipped_percent > .15 |
+                                 probrat_skipped_percent > .15 |
+                                 trials_completed < 80)
+
+#count the number of soft QC cutoffs each subject meets
+subs$softs <- 0
+for(i in 1:nrow(subs)){
+  subs$softs[i] <- length(which(c(subs$att_checks_passed[i] == 3,subs$answers_incorrect[i] == 2,
+                                  subs$sd_valrat[i] < .07, subs$valrat_skipped_percent[i] > .10,
+                                  subs$sd_probrat[i] < .07, subs$probrat_skipped_percent[i] > .10)))
+}
+
+sub_soft_fail <- filter(subs,softs >= 2) #identify those who meet more than 2 soft cutoffs
+
+subs_to_exclude <- unique(c(sub_hard_fail$id,sub_soft_fail$id)) #get subjects who failed either set of criteria
+
+#clean data
+trials <- trials %>% filter(!(id %in% subs_to_exclude))
+subs <- subs %>% filter(!(id %in% subs_to_exclude))
+
+length(subs_to_exclude)/(nrow(subs)+length(subs_to_exclude)) #get percent excluded
+```
+
+Data transformations
+```{r}
+trials <- add_sub_indices(trials) #add subject indices to the df. These will match the indices used in Stan.
+trials <- add_probe_number(trials,newcol="vrat_number",val_col="val_rat") #add valence rating number
+trials <- add_probe_number(trials,newcol="prat_number",val_col="prob_rat") #add probability rating number
+trials$prev_vrat_cent <- trials$prev_rate - mean(trials$prev_rate,na.rm=T)
+
+trials <- trials %>% mutate(frac_ix = case_when(
+                      frac_img == 1 ~ 1,
+                      frac_img == 9 ~ 2,
+                      frac_img == 3 ~ 3,
+                      frac_img == 5 ~ 4,
+                      )) %>%
+                    mutate(alt_frac_ix = case_when(
+                      frac_ix == 1 ~ 2,
+                      frac_ix == 2 ~ 1,
+                      frac_ix == 3 ~ 4,
+                      frac_ix == 4 ~ 3
+                    ))
+```
+
+How many subjects said they experienced significant emotion during the task?
+```{r}
+sum(subs$sig_emot == "Yes")/nrow(subs)
+```
+
+```{r}
+subs$age <- as.numeric(subs$age)
+mean(subs$age)
+sd(subs$age)
+```
+
+```{r}
+sum(subs$gender=="Male")
+```
+
+```{r}
+sum(subs$gender=="Female")
+```
+
+```{r}
+sum(subs$gender=="Non-binary")
+```
+
+```{r}
+trials %>%
+  group_by(id) %>%
+  summarize(correlation = cor(outcome, val_rat, use = "complete.obs"))
+```
+
+
+# Preregistered analyses
+
+Fit first couple of models
+```{r}
+prereg <- fit_stan_model(stan_file=paste0(stan_model_dir,"prereg_rva2.stan"),
+                                   model_out_dir=model_out_dir,
+                                   raw_data=trials,
+                                   study = "rva2",
+                                   n_t = 80)
+```
+
+```{r}
+prereg$diagnostics
+```
+
+```{r}
+view(filt_sum(prereg$sum,"mu"))
+view(filt_sum(prereg$sum,"sigma"))
+view(prereg$sum)
+```
+
+```{r}
+pp_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("prob_pred"))
+ps_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("prob_sigma"))
+prob_rsq_prereg <- mcmc_rsq(pp_prereg,ps_prereg,print_plot=FALSE)
+prob_rsq_prereg$sum['median']
+```
+```{r}
+for(i in 0:7){
+  rsq <- mcmc_rsq(pp_prereg[,,(40*i + 1):(40*(i+1))],ps_prereg,print_plot=FALSE)
+  cat("index",i,": ",rsq$sum[['median']],"\n")
+}
+```
+
+
+```{r}
+vp_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("val_pred"))
+vss_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("val_sigma_sigma"))
+vs_prereg <- apply(vss_prereg,c(1,2,3),half_normal_mean)
+val_rsq_prereg <- mcmc_rsq(vp_prereg,vs_prereg,print_plot=FALSE)
+val_rsq_prereg$sum[['median']]
+```
+
+```{r}
+b_v <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_V_mu"))
+b_alt <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_alt_mu"))
+quantile(b_v - b_alt, c(.025,.50,.975))
+```
+
