@@ -32,8 +32,8 @@ library(sigmoid)
 
 Read in data, run through QC
 ```{r}
-trials <- read.csv(paste0(path_to_project_directory,"analysis_data/trial_level_data_all_subs_2024-08-27_18_23_19.092039.csv"))
-subs <- read.csv(paste0(path_to_project_directory,"analysis_data/sub_level_data_all_subs_2024-08-27_18_23_19.092039.csv"))
+trials <- read.csv(paste0(path_to_project_directory,"analysis_data/trial_level_data_all_subs_2024-09-04_15_03_40.77831.csv"))
+subs <- read.csv(paste0(path_to_project_directory,"analysis_data/sub_level_data_all_subs_2024-09-04_15_03_40.77831.csv"))
 
 sub_hard_fail <- subs %>% filter(att_checks_passed < 3 |
                                  answers_incorrect > 2 |
