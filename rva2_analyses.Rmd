@@ -28,12 +28,13 @@ library(cmdstanr)
 library(bayesplot)
 library(abind)
 library(sigmoid)
+library(posterior)
 ```
 
 Read in data, run through QC
 ```{r}
-trials <- read.csv(paste0(path_to_project_directory,"analysis_data/trial_level_data_all_subs_2024-09-04_15_03_40.77831.csv"))
-subs <- read.csv(paste0(path_to_project_directory,"analysis_data/sub_level_data_all_subs_2024-09-04_15_03_40.77831.csv"))
+trials <- read.csv(paste0(path_to_project_directory,"analysis_data/trial_level_data_all_subs_2024-09-06_14_00_57.801362.csv"))
+subs <- read.csv(paste0(path_to_project_directory,"analysis_data/sub_level_data_all_subs_2024-09-06_14_00_57.801362.csv"))
 
 sub_hard_fail <- subs %>% filter(att_checks_passed < 3 |
                                  answers_incorrect > 2 |
@@ -107,23 +108,23 @@ sum(subs$gender=="Non-binary")
 ```
 
 ```{r}
-trials %>%
-  group_by(id) %>%
-  summarize(correlation = cor(outcome, val_rat, use = "complete.obs"))
+rew_cors <- trials %>%
+              group_by(id) %>%
+              summarize(correlation = cor(outcome, val_rat, use = "complete.obs"))
+mean(rew_cors$correlation)
 ```
-
 
 # Preregistered analyses
 
-Fit first couple of models
+Fit preregistered model
 ```{r}
 prereg <- fit_stan_model(stan_file=paste0(stan_model_dir,"prereg_rva2.stan"),
                                    model_out_dir=model_out_dir,
                                    raw_data=trials,
-                                   study = "rva2",
-                                   n_t = 80)
+                                   study = "rva2")
 ```
 
+Review results
 ```{r}
 prereg$diagnostics
 ```
@@ -134,20 +135,16 @@ view(filt_sum(prereg$sum,"sigma"))
 view(prereg$sum)
 ```
 
+
+Get r-sq for probability ratings
 ```{r}
 pp_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("prob_pred"))
 ps_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("prob_sigma"))
 prob_rsq_prereg <- mcmc_rsq(pp_prereg,ps_prereg,print_plot=FALSE)
 prob_rsq_prereg$sum['median']
 ```
-```{r}
-for(i in 0:7){
-  rsq <- mcmc_rsq(pp_prereg[,,(40*i + 1):(40*(i+1))],ps_prereg,print_plot=FALSE)
-  cat("index",i,": ",rsq$sum[['median']],"\n")
-}
-```
 
-
+Get r-sq for valence ratings
 ```{r}
 vp_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("val_pred"))
 vss_prereg <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("val_sigma_sigma"))
@@ -156,9 +153,42 @@ val_rsq_prereg <- mcmc_rsq(vp_prereg,vs_prereg,print_plot=FALSE)
 val_rsq_prereg$sum[['median']]
 ```
 
+Do the vector-based analysis
 ```{r}
-b_v <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_V_mu"))
-b_alt <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_alt_mu"))
-quantile(b_v - b_alt, c(.025,.50,.975))
+set.seed(6)
+rew <- c(1,0,0)
+rpe <- c(0.5,-0.5,0)
+mm <- c(0,0.5,0.5)
+dvec_mat <- cbind(rew,rpe,mm) #turn into matrix
+
+prereg_eff <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_rew_mu","B_V_mu","B_alt_mu"))
+
+vec_ws_prereg <- apply(prereg_eff,c(1,2),vec_optim,dvec=dvec_mat,init_pars=c(0,0,0)) #get vector weights
+
+vec_ws_prereg_org <- aperm(vec_ws_prereg,c(2,3,1)) #rearrange dimensions
+dimnames(vec_ws_prereg_org)[[3]] <- c("rew","rpe","mm") #name appropriately
+create_interval_plot(vec_ws_prereg_org,names = c("mm","rpe","rew"),xmin = -.012, xmax = .1)
+```
+
+```{r}
+mn_data_prereg <- apply(prereg_eff,c(1,2),function(x) sum(abs(x))) #get the manhattan norms for each data vector by summing the absolute values
+
+comb_array_prereg <- abind(vec_ws_prereg_org,mn_data_prereg,along=3) #staple mn_data to the back of the third dimension of the vector weight array
+vec_ws_norm_prereg <- apply(comb_array_prereg,c(1,2),get_ports) #get portions of relationship accounted for
+
+vec_ws_norm_org_prereg <- aperm(vec_ws_norm_prereg,c(2,3,1))
+dimnames(vec_ws_norm_org_prereg)[[3]] <- c("rew","rpe","mm","resid") #name meaningfully
+
+create_interval_plot(arr = vec_ws_norm_org_prereg, names = c("resid","mm","rpe","rew"), xmin = -.012, xmax = 1)
+```
+
+Get regression effects
+```{r}
+create_interval_plot(arr = prereg_eff, names = c("B_alt_mu","B_V_mu","B_rew_mu"), xmin = -0.02, xmax = .04)
+```
+```{r}
+v_draws <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_V_mu"))
+alt_draws <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_alt_mu"))
+mean(v_draws > alt_draws)
 ```
 
