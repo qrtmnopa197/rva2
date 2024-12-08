@@ -92,6 +92,7 @@ sum(subs$sig_emot == "Yes")/nrow(subs)
 ```{r}
 subs$age <- as.numeric(subs$age)
 mean(subs$age)
+median(subs$age)
 sd(subs$age)
 ```
 
@@ -186,9 +187,73 @@ Get regression effects
 ```{r}
 create_interval_plot(arr = prereg_eff, names = c("B_alt_mu","B_V_mu","B_rew_mu"), xmin = -0.02, xmax = .04)
 ```
+
 ```{r}
 v_draws <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_V_mu"))
-alt_draws <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_alt_mu"))
-mean(v_draws > alt_draws)
+rew_draws <- get_draws("prereg_rva2",model_out_dir=model_out_dir,vars=c("B_rew_mu"))
+quantile(v_draws,c(.50,.025,.975))*100
+quantile(rew_draws,c(.50,.025,.975))*100
+```
+
+# Exploratory analyses
+
+Testing whether affect associations contribute to learning
+```{r}
+arl_pav2 <- fit_stan_model(stan_file=paste0(stan_model_dir,"arl_pav2.stan"),
+                                   model_out_dir=model_out_dir,
+                                   raw_data=trials,
+                                   study = "rva2")
+```
+
+```{r}
+pB_V <- get_draws("arl_pav2",model_out_dir = model_out_dir,vars=c("pB_V_mu"))
+pB_A <- get_draws("arl_pav2",model_out_dir = model_out_dir,vars=c("pB_A_mu"))
+quantile(pB_V,c(.025,.50,.975))*200
+quantile(pB_A,c(.025,.50,.975))
+```
+
+
+Negative correlation between learning rate and V? Start by doing this very roughly
+```{r}
+b_v_mean <- ncp_mean_hist(prereg_rva2$sum,"B_V",print_hist=F)
+alpha_mean <- ncp_mean_hist(prereg_rva2$sum,"alpha",print_hist=F)
+b_v_alpha_fit <- lm(b_v_mean$means ~ alpha_mean$means)
+summary(b_v_alpha_fit)
+```
+
+Now doing it more properly by fitting a model that allows these effects to correlate
+```{r}
+bv_alpha_cor2 <- fit_stan_model(stan_file=paste0(stan_model_dir,"bv_alpha_cor2.stan"),
+                                   model_out_dir=model_out_dir,
+                                   raw_data=trials,
+                                   study = "rva2")
+```
+
+```{r}
+bv_alpha_cor <- get_draws("bv_alpha_cor2",model_out_dir = model_out_dir,vars=c("bv_alpha_cor"))
+quantile(bv_alpha_cor,c(.025,.50,.975))
+mean(bv_alpha_cor < 0)
+```
+
+Testing whether probability rating residuals predict affect
+```{r}
+v_resid2 <- fit_stan_model(stan_file=paste0(stan_model_dir,"v_resid2.stan"),
+                                   model_out_dir=model_out_dir,
+                                   raw_data=trials,
+                                   study = "rva2")
+```
+
+```{r}
+raw_effs <- get_draws("v_resid2",vars=c("B_V_r_mu","B_alt_r_mu","B_V_mu","B_alt_mu","B_rew_mu"),model_out_dir=model_out_dir)
+create_interval_plot(arr = raw_effs, names = c("B_alt_r_mu","B_V_r_mu","B_alt_mu","B_V_mu","B_rew_mu"), xmin = -0.005, xmax = .035)
+```
+
+Get r-squared for this model
+```{r}
+vp_resid<- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("val_pred"))
+vss_resid <- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("val_sigma_sigma"))
+vs_resid <- apply(vss_resid,c(1,2,3),half_normal_mean)
+val_rsq_resid <- mcmc_rsq(vp_resid,vs_resid,print_plot=FALSE)
+val_rsq_resid$sum[['median']]
 ```
 
