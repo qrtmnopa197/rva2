@@ -105,7 +105,7 @@ transformed parameters {
     for (s in 1:n_s) {
       for (t in 1:n_t){
         if(t == 1){
-          V[s,t] = rep_vector(0,n_f); // for the first trial of each subject, set all V-values to 0
+          V[s,t] = rep_vector(0,n_f); // on the first trial of each subject, initialize all V-values to 0
           V_resid[s,t] = rep_vector(0,n_f);
         }
         

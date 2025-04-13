@@ -195,6 +195,11 @@ quantile(v_draws,c(.50,.025,.975))*100
 quantile(rew_draws,c(.50,.025,.975))*100
 ```
 
+Look at subject-level values
+```{r}
+ncp_mean_hist(prereg_rva2$sum,"B_rew")
+```
+
 # Exploratory analyses
 
 Testing whether affect associations contribute to learning
@@ -245,7 +250,31 @@ v_resid2 <- fit_stan_model(stan_file=paste0(stan_model_dir,"v_resid2.stan"),
 
 ```{r}
 raw_effs <- get_draws("v_resid2",vars=c("B_V_r_mu","B_alt_r_mu","B_V_mu","B_alt_mu","B_rew_mu"),model_out_dir=model_out_dir)
-create_interval_plot(arr = raw_effs, names = c("B_alt_r_mu","B_V_r_mu","B_alt_mu","B_V_mu","B_rew_mu"), xmin = -0.005, xmax = .035)
+raw_eff_intervals <- create_interval_plot(arr = raw_effs, names = c("B_alt_r_mu","B_V_r_mu","B_alt_mu","B_V_mu","B_rew_mu"), 
+                                         color_mapping = c("B_V_r_mu" = "#414141",
+                                                           "B_V_mu" = "#414141",
+                                                           "B_rew_mu" = "#414141",
+                                                           "B_alt_mu" = "#414141",
+                                                           "B_alt_r_mu" = "#414141",
+                                                           "B_V_r_mu_med" = "black",
+                                                           "B_V_mu_med" = "black",
+                                                           "B_rew_mu_med" = "black",
+                                                           "B_alt_mu_med" = "black",
+                                                           "B_alt_r_mu_med" = "black"),
+                                         xmin = -.005, xmax = .035,
+                                         percentiles = c(0.025,.25,.50,.75,.975),
+                                         dot_size = 3,
+                                         scale = .47) +
+                     theme(panel.grid.major.x = element_line(color = "#DCDCDC", size = .47),
+                         panel.background = element_rect(fill = "white", color = NA),
+                         #axis.text.x = element_blank(),
+                         axis.text.y=element_blank())
+ggsave("/Users/dp/Documents/conferences/SAS_2025/figures/vr_eff_intervals_s2.pdf",raw_eff_intervals,width=4,height=3)
+```
+
+```{r}
+mean(raw_effs[,,"B_V_mu"] > raw_effs[,,"B_alt_mu"])
+mean(raw_effs[,,"B_V_r_mu"] > raw_effs[,,"B_alt_r_mu"])
 ```
 
 Get r-squared for this model
@@ -257,3 +286,53 @@ val_rsq_resid <- mcmc_rsq(vp_resid,vs_resid,print_plot=FALSE)
 val_rsq_resid$sum[['median']]
 ```
 
+# Model-free analyses
+
+Plot effects of past rewards on valence for shown and unshown cues separately.
+```{r}
+trials_lags <- trials %>%
+  group_by(id, block) %>%
+  group_modify(~ add_mult_shunsh_lag_outs(.x,lags=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20))) %>%
+  ungroup()
+
+
+lag_fit_double <- lm(valrat_z ~ outcome + out_shc_lag1 + out_shc_lag6 + out_shc_lag10 + out_shc_lag14 + out_shc_lag18 +
+                                          out_unshc_lag1 + out_unshc_lag6 + out_unshc_lag10 + out_unshc_lag14 + out_unshc_lag18 +
+                                          prev_vrat_cent,trials_lags)
+
+create_line_plot(lag_fit_double$coefficients[3:7],lag_fit_double$coefficients[8:12])
+```
+```{r}
+lag_fit_fourth <- lm(valrat_z ~ outcome + out_shc_lag1 + out_shc_lag5 + out_shc_lag9 + out_shc_lag13 + out_shc_lag17 +
+                                          out_unshc_lag1 + out_unshc_lag5 + out_unshc_lag9 + out_unshc_lag13 + out_unshc_lag17 +
+                                          prev_vrat_cent,trials_lags)
+
+create_line_plot(lag_fit_fourth$coefficients[3:7],lag_fit_fourth$coefficients[8:12])
+```
+Weird negative effects of the unshown cue.
+
+Let's look at the results when you look at past rewards from each cue specifically
+
+```{r}
+# Add columns for past rewards from specific cues
+trials_byfrac_lag <- trials %>%
+  group_by(id) %>%
+  group_split() %>%
+  lapply(function(df) {
+    for (lag_n in 1:18) {
+      df[[paste0("out_shc_lag", lag_n)]] <- get_lagged_outcome(df, "frac_ix", "frac_ix", lag_n)
+      df[[paste0("out_unshc_lag", lag_n)]] <- get_lagged_outcome(df, "alt_frac_ix", "frac_ix", lag_n)
+    }
+    df
+  }) %>%
+  bind_rows()
+```
+
+Plot
+```{r}
+lag_byfrac_fit_odds <- lm(valrat_z ~ outcome + out_shc_lag1 + out_shc_lag3 + out_shc_lag5 + out_shc_lag7 + out_shc_lag9 +
+                                          out_unshc_lag1 + out_unshc_lag3 + out_unshc_lag5 + out_unshc_lag7 + out_unshc_lag9 +
+                                          prev_vrat_cent,trials_byfrac_lag)
+
+create_line_plot(lag_byfrac_fit_odds$coefficients[3:7],lag_byfrac_fit_odds$coefficients[8:12])
+```
