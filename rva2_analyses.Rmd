@@ -336,3 +336,34 @@ lag_byfrac_fit_odds <- lm(valrat_z ~ outcome + out_shc_lag1 + out_shc_lag3 + out
 
 create_line_plot(lag_byfrac_fit_odds$coefficients[3:7],lag_byfrac_fit_odds$coefficients[8:12])
 ```
+# Final models
+
+Run with triple the iterations to ensure sufficient ESS. Hopefully this will resolve the one bad R-hat too.
+```{r}
+v_resid2 <- fit_stan_model(stan_file=paste0(stan_model_dir,"v_resid2.stan"),
+                                   model_out_dir=model_out_dir,
+                                   iter_sampling = 3000,
+                                   raw_data=trials,
+                                   study = "rva2")
+```
+
+Calculating r-squared properly
+```{r}
+prob_pred_vr2 <- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("prob_pred"))
+prob_sigma_vr2 <- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("prob_sigma"))
+prob_resid_var_vr2 <- get_trunc_norm_var_3darray(prob_pred_vr2,prob_sigma_vr2,0,1)
+prob_rsq_vr2 <- mcmc_rsq(prob_pred_vr2,prob_resid_var_vr2,sd=FALSE,print_plot=FALSE)
+cat(paste0("Probability ratings r-sq: ",prob_rsq_vr2$sum$mean,"\n\n"))
+```
+
+```{r}
+val_pred_vr2 <- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("val_pred"))
+val_sigma_vr2 <- get_draws("v_resid2",model_out_dir=model_out_dir,vars=c("val_sigma_ss"))
+val_resid_var_vr2 <- get_trunc_norm_var_3darray(val_pred_vr2,val_sigma_vr2,0,1)
+val_rsq_vr2 <- mcmc_rsq(val_pred_vr2,val_resid_var_vr2,sd=FALSE,print_plot=FALSE)
+cat(paste0("Valence ratings r-sq: ",val_rsq_vr2$sum$mean))
+```
+
+
+
+
