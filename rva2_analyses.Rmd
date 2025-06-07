@@ -168,7 +168,12 @@ vec_ws_prereg <- apply(prereg_eff,c(1,2),vec_optim,dvec=dvec_mat,init_pars=c(0,0
 
 vec_ws_prereg_org <- aperm(vec_ws_prereg,c(2,3,1)) #rearrange dimensions
 dimnames(vec_ws_prereg_org)[[3]] <- c("rew","rpe","mm") #name appropriately
-create_interval_plot(vec_ws_prereg_org,names = c("mm","rpe","rew"),xmin = -.012, xmax = .1)
+#create_interval_plot(vec_ws_prereg_org,names = c("mm","rpe","rew"),xmin = -.012, xmax = .1)
+
+cat("rew_vec\n")
+get_ci_pd(draws = vec_ws_prereg_org[,,"rew"],scale=200)
+cat("rpe_vec\n")
+get_ci_pd(draws = vec_ws_prereg_org[,,"rpe"],scale=200)
 ```
 
 ```{r}
@@ -262,14 +267,14 @@ raw_eff_intervals <- create_interval_plot(arr = raw_effs, names = c("B_alt_r_mu"
                                                            "B_alt_mu_med" = "black",
                                                            "B_alt_r_mu_med" = "black"),
                                          xmin = -.005, xmax = .035,
-                                         percentiles = c(0.025,.25,.50,.75,.975),
                                          dot_size = 3,
                                          scale = .47) +
                      theme(panel.grid.major.x = element_line(color = "#DCDCDC", size = .47),
                          panel.background = element_rect(fill = "white", color = NA),
                          #axis.text.x = element_blank(),
                          axis.text.y=element_blank())
-ggsave("/Users/dp/Documents/conferences/SAS_2025/figures/vr_eff_intervals_s2.pdf",raw_eff_intervals,width=4,height=3)
+#ggsave("/Users/dp/Documents/conferences/SAS_2025/figures/vr_eff_intervals_s2.pdf",raw_eff_intervals,width=4,height=3)
+ggsave("~/Documents/manuscripts/rva/figures_tables/fig_2/s2_effs_raw.pdf",raw_eff_intervals,width=4,height=3)
 ```
 
 ```{r}
@@ -336,6 +341,7 @@ lag_byfrac_fit_odds <- lm(valrat_z ~ outcome + out_shc_lag1 + out_shc_lag3 + out
 
 create_line_plot(lag_byfrac_fit_odds$coefficients[3:7],lag_byfrac_fit_odds$coefficients[8:12])
 ```
+
 # Final models
 
 Run with triple the iterations to ensure sufficient ESS. Hopefully this will resolve the one bad R-hat too.
@@ -364,6 +370,32 @@ val_rsq_vr2 <- mcmc_rsq(val_pred_vr2,val_resid_var_vr2,sd=FALSE,print_plot=FALSE
 cat(paste0("Valence ratings r-sq: ",val_rsq_vr2$sum$mean))
 ```
 
+# Get main parameter estimates
+```{r}
+get_ci_pd(model_name="v_resid2",var_name="B_rew_mu",model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",var_name="B_V_mu",model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",var_name="B_V_r_mu",model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",var_name="B_alt_mu",model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",var_name="B_alt_r_mu",model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",diff_vars=c("B_rew_mu","B_V_mu"),model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",diff_vars=c("B_V_mu","B_alt_mu"),model_out_dir=model_out_dir,scale=200)
+get_ci_pd(model_name="v_resid2",diff_vars=c("B_V_r_mu","B_alt_r_mu"),model_out_dir=model_out_dir,scale=200)
+```
 
+# Parameter estimate table
 
+Create a table of parameter estimates from the final model (this table is include in the supplement).
+```{r}
+# Get info on the posterior distribution for all relevant parameters
+mu_table <- select(filt_sum(v_resid2$sum,"mu"),variable,median,q5,q95)
+mu_table[2,3,4] <- as.numeric(mu_table[2,3,4])
+
+mu_table[1:2,2:4] <- sigmoid(mu_table[1:2,2:4]) # Transform learning and forgetting rate to original scale
+mu_table[c(4:8),2:4] <- mu_table[c(4:8),2:4]*200 # Multiply effects in units of points by 100
+
+mu_table[,c("median","q5","q95")] <- round(mu_table[,c("median","q5","q95")],2)
+
+#write.csv(mu_table,paste0(fig_dir,"params_tab_s2.csv")) #this CSV will be converted into a figure
+write.csv(mu_table,"~/Documents/manuscripts/rva/figures_tables/param_tabs/params_tab_s2.csv")
+```
 
