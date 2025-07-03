@@ -13,10 +13,10 @@ get_lagged_outcome <- function(data, match_from_col, match_to_col, lag_n) {
 }
 
 #Returns a list of data for input to stan, given trial-level data
-#trials: trial-level data
-#n_t: number of trials; must be set manually
+# trials: trial-level data
+# n_t: number of trials; must be set manually
 stan_data_rva2 <- function(trials,n_t){
-  n_s <- length(unique(trials$id)) #get number of subjects
+  n_s <- length(unique(trials$id)) # Get number of subjects
   n_f <- max(trials$frac_ix)
   
   out_size <- abs(trials$outcome[1]) # Absolute value of outcomes
@@ -26,14 +26,14 @@ stan_data_rva2 <- function(trials,n_t){
   frac <- sub_by_trial_matrix(trials,"frac_ix") # Fractal index on each trial
   alt_frac <- sub_by_trial_matrix(trials,"alt_frac_ix") # Alternative fractal on each trial
   
-  #valence rating data
+  # Valence rating data
   val_rat_num <- sub_by_trial_matrix(trials,"vrat_number")
   n_vrat <- max(trials$vrat_number)
   
   val_rat_trials <- filter(trials,vrat_number != 0)
   val_rat <- val_rat_trials$val_rat
   
-  #probability rating data
+  # Probability rating data
   prob_rat_num <- sub_by_trial_matrix(trials,"prat_number")
   n_prat <- max(trials$prat_number)
   

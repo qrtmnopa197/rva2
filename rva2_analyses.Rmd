@@ -382,20 +382,39 @@ get_ci_pd(model_name="v_resid2",diff_vars=c("B_V_mu","B_alt_mu"),model_out_dir=m
 get_ci_pd(model_name="v_resid2",diff_vars=c("B_V_r_mu","B_alt_r_mu"),model_out_dir=model_out_dir,scale=200)
 ```
 
-# Parameter estimate table
 
-Create a table of parameter estimates from the final model (this table is include in the supplement).
+# Posterior distributions for population-level parameters
 ```{r}
-# Get info on the posterior distribution for all relevant parameters
+fig_dir <- "/Users/dp/Documents/manuscripts/rva/figures_tables/supp_tab_4/"
+```
+
+Create a CSV with estimated population means for model parameters
+```{r}
+# Get posterior population means for relevant parameters
 mu_table <- select(filt_sum(v_resid2$sum,"mu"),variable,median,q5,q95)
 mu_table[2,3,4] <- as.numeric(mu_table[2,3,4])
 
-mu_table[1:2,2:4] <- sigmoid(mu_table[1:2,2:4]) # Transform learning and forgetting rate to original scale
-mu_table[c(4:8),2:4] <- mu_table[c(4:8),2:4]*200 # Multiply effects in units of points by 100
+mu_table[c(4:8),2:4] <- mu_table[c(4:8),2:4]*200 # Re-scale effects on the points scale to the 0-1 scale (see Methods)
 
 mu_table[,c("median","q5","q95")] <- round(mu_table[,c("median","q5","q95")],2)
 
-#write.csv(mu_table,paste0(fig_dir,"params_tab_s2.csv")) #this CSV will be converted into a figure
-write.csv(mu_table,"~/Documents/manuscripts/rva/figures_tables/param_tabs/params_tab_s2.csv")
+write.csv(mu_table,paste0(fig_dir,"mu_table_s2.csv")) 
 ```
 
+Create a CSV with estimated population SDs for model parameters
+```{r}
+# Get posterior population SDs for relevant parameters
+sigma_table <- select(filt_sum(v_resid2$sum,"sigma"),variable,median,q5,q95) %>% 
+                  filter(!str_starts(variable, "prob_sigma") &
+                         !str_starts(variable, "val_sigma"))
+
+sigma_table[2,3,4] <- as.numeric(sigma_table[2,3,4])
+
+sigma_table[c(4:8),2:4] <- sigma_table[c(4:8),2:4]*200 # Re-scale effects on the points scale to the 0-1 scale (see Methods)
+
+sigma_table[,c("median","q5","q95")] <- round(sigma_table[,c("median","q5","q95")],2)
+
+write.csv(sigma_table,paste0(fig_dir,"sigma_table_s2.csv")) 
+```
+
+These CSVs were used to create Supplementary Table 4.
